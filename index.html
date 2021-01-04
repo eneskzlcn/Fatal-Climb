@@ -1,0 +1,693 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"> <!-- ,shrink-to-fit=no-->
+    <link rel="icon" href="icon.png">
+    <title>Fatal Climb</title>
+    <!-- Add icon library -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
+<link rel = "stylesheet" href="style.css">
+    <style>
+    
+    </style>
+</head>
+<body>
+<script>
+    "use strict"
+    //initializing canvas
+
+	  var canvas ;
+    var ctx;
+    //--------------------------------
+    //defining game objects and global variables
+    var char = {pos:{x:0,y:0},width:0,height:0,gravity_magnitude:0,speed:{x:0,y:0},
+    jumpMagnitude:0,img:0,onGround:false}
+    var apartment_left = {pos:{x:0,y:0},width:0,height:0,speed:{x:0,y:0},img:0}
+    var apartment_right = {pos:{x:0,y:0},width:0,height:0,speed:{x:0,y:0},img:0};
+    let autumn_platform;
+    let winter_platform;
+    let sunny_platform;
+    let spring_platform;
+    var chosen_platform;
+    let char_img;
+    let char_jump_img;
+    let apartment_img;
+    var platforms;
+    const platforms_spawn_point_y =-440;
+    const padding_btw_platforms = 100;
+    var char_gravity_magnitude= 3;
+    var platform_gravity_magnitude = 1.5;
+    const platform_width = 80;
+    const platform_height = 30;
+    const platform_count = 40;
+    const platform_gravity_increase_amount =0.1;
+    const char_gravity_increase_amount = 0.1;
+    var background_sound;
+    var jump_sound;
+    var death_sound;
+    var win_sound;
+    let is_game_over = false;
+    let is_game_finished = false;
+    var gameIntervalID = 0
+    var volume = 0.05
+    var level = 1;
+    var score = {value:0,pos:{x:0,y:0},isBroken:false}
+    //-------------------------------
+    //Adding listener funct. if exists
+    document.addEventListener("keydown", keyDownHandler,true);
+    document.addEventListener("keyup",keyUpHandler,false);
+
+    //initializing all the game before start...
+    var init_game = ()=>
+    {
+      platform_gravity_magnitude=1.5
+      char_gravity_magnitude =3
+      is_game_over = false;
+      is_game_finished = false;
+      platforms = []
+      canvas = document.createElement("canvas");
+      canvas.width = 375
+      canvas.height = 400
+      document.body.appendChild(canvas);
+      ctx = canvas.getContext("2d");
+      ctx.font = "20px Arial";
+      init_sounds();
+      init_images();
+      chosen_platform = spring_platform
+      init_apartments()//sağa doğru x artıyor.yukarı doğru y azalıyor.
+      init_character();
+      init_platforms();
+      init_uielements();
+      //canvas.addEventListener("touchstart",handleStart)
+      canvas.addEventListener("mousedown",handleClick)
+      canvas.addEventListener("mouseup",handleMouseUp)
+    }
+    var init_sounds = ()=>
+    {
+      background_sound = new sound("sounds/background_sound.mp3")
+      jump_sound = new sound("sounds/jump_sound.ogg")
+      death_sound = new sound("sounds/death_sound.wav")
+      win_sound = new sound("sounds/win_sound.wav")
+    }
+    var init_images = ()=>
+    {
+      char_img = new Image();
+      char_jump_img = new Image();
+      apartment_img = new Image();
+      autumn_platform = new Image();
+      winter_platform = new Image();
+      sunny_platform  = new Image();
+      spring_platform = new Image();
+      char_img.src = "images/char_idle.png";
+      char_jump_img.src = "images/char_jump.png";
+      apartment_img.src = "images/wall.png";
+      autumn_platform.src = "images/autumn_platform.png"
+      winter_platform.src = "images/winter_platform.png"
+      sunny_platform .src = "images/sunny_platform.png"
+      spring_platform.src = "images/spring_platform.png"
+    }
+    //initializing apartments
+    var init_apartments =()=>
+    {// apartments are constants. their position will never change... width,height == img.width,img.height
+      apartment_left.width=50,apartment_left.height = canvas.height,apartment_left.img = apartment_img;
+      apartment_right.width=50,apartment_right.height = canvas.height,apartment_right.img=apartment_img,
+      apartment_right.pos.x = canvas.width-50;
+    }
+
+    //initalizing character
+    var init_character = ()=>
+    {
+      char.pos.x = canvas.width/2-120,char.pos.y=canvas.height/2-140,char.width = 80,char.height=58,
+      char.gravity_magnitude=char_gravity_magnitude, char.speed.x = 70,char.jumpMagnitude=70,char.img = char_img,
+      char.onGround = false
+    }
+    //initializing platforms
+    var init_platforms = (platforms_y = 360)=>
+    {
+      var left_side_platform_x = apartment_left.width;
+      var right_side_platform_x = canvas.width-apartment_right.width-platform_width
+      for(let i = 0; i < platform_count;i++)
+      {
+        if(i == platform_count-1)
+        {
+          let middle_platform_x = (canvas.width/2-platform_width/2)
+          platforms[i]= {pos:{x:middle_platform_x,y:platforms_y},width:platform_width,index:i,is_controlled:false,
+            height:platform_height,gravity_magnitude:platform_gravity_magnitude,toConnected:"mid",img:chosen_platform}
+          break;
+        }
+        if(i%2 == 0)
+        {
+          platforms[i]= {pos:{x:left_side_platform_x,y:platforms_y},width:platform_width,index:i,
+            height:platform_height,gravity_magnitude:platform_gravity_magnitude,toConnected:"left",img:chosen_platform}
+        }
+        else
+        {
+          platforms[i]= {pos:{x:right_side_platform_x,y:platforms_y},width:platform_width,index:i,
+            height:platform_height,gravity_magnitude:platform_gravity_magnitude,toConnected:"right",img:chosen_platform}
+        }
+        platforms_y -= padding_btw_platforms;
+      }
+    }
+    //initialize uı elements
+    var init_uielements = ()=>
+    {
+      score.value = 0
+      score.isBroken = false
+      score.pos.x = canvas.width/2-10
+      score.pos.y = 20
+    }
+    //making start,end game menus
+    //make start menu
+    var makeStartMenu = ()=>
+    {
+      //start panel
+      let panel = document.createElement("div")
+      panel.style.width = "375px"
+      panel.style.height = "400px"
+      document.body.appendChild(panel);
+      //game name
+      let gameName = document.createElement("h1")
+      gameName.className = "title"
+      gameName.style.fontSize = "40px"
+      gameName.innerText = "FATAL CLIMB"
+      
+      panel.appendChild(gameName);
+      //highscore Text
+      let highscoreText = document.createElement("h2")
+      highscoreText.className = "subtitle"
+      highscoreText.innerText = "Your highscore: "+ JSON.parse(localStorage.getItem('highscore'))
+      panel.appendChild(highscoreText)
+      //game controlls description
+      let howToControlText = document.createElement("p")
+      howToControlText.innerText = "How To Control ?"
+      howToControlText.className = "desc"
+      let descriptionText= document.createElement("p")
+      descriptionText.innerText = "Press 'Arrow Up' or tap higher than character to jump\n\n"+"Press 'Arrow Right'or tap right part of screen to move right \n\n"
+        +"Press 'Arrow Left' or tap left part of the screen to move left"
+      let desc = document.createElement("span")
+      desc.className = "innerDesc"
+      desc.appendChild(descriptionText)
+      howToControlText.appendChild(desc)
+      panel.appendChild(howToControlText)
+      //start button
+      let startButton = document.createElement("a")
+      startButton.href = "#"
+      startButton.className="play-btn"
+      panel.appendChild(startButton)
+      let musicButton = document.createElement("a")
+      let musicIcon = document.createElement("i")
+      musicIcon.className = "fa fa-volume-up"
+      musicButton.appendChild(musicIcon)
+      musicButton.style.fontSize = "20px"
+      musicButton.style.color = "white"
+      musicIcon.style.position = "relative"
+      musicIcon.style.margin = "11px"
+      musicButton.className = "music-btn"
+      
+      panel.appendChild(musicButton)
+      musicButton.addEventListener("click",()=>
+      {
+        if(volume >0)
+        {
+          volume = 0
+          musicIcon.className = "fa fa-volume-off"
+        }
+        else
+        {
+          volume = 0.1
+          musicIcon.className = "fa fa-volume-up"
+        }
+
+      })
+      startButton.addEventListener("click",()=>
+      {
+        document.body.removeChild(panel)
+        level = 1;
+        init_game()
+        gameIntervalID = setInterval(game,20)
+        background_sound.play();
+      })
+    }
+    //making game over menu
+    var makeEndGameMenu = (menuText)=>
+    {
+      //game over panel
+      let panel = document.createElement("div")
+      panel.style.width = "375px"
+      panel.style.height = "400px"
+      document.body.appendChild(panel);
+      //game over text
+      let game_state = document.createElement("h1")
+      game_state.className = "title"
+      game_state.innerText = menuText
+      panel.appendChild(game_state);
+      //you got highscore
+      if(score.isBroken)
+      {
+        let gotHighScore = document.createElement("h2")
+        gotHighScore.className = "subtitle"
+        gotHighScore.style.fonstSize = "30px"
+        gotHighScore.innerText = 'You got highscore!'
+        panel.appendChild(gotHighScore);
+      }
+      //Highscore text
+      let highscoreText = document.createElement("h2")
+      let highscore = JSON.parse(localStorage.getItem('highscore'))
+      highscoreText.className ="subtitle"
+      highscoreText.style.fontSize = "30px";
+      highscoreText.innerText = 'Your highscore: '+ highscore
+      panel.appendChild(highscoreText);
+      //Score text
+      let scoreText = document.createElement("h2")
+      scoreText.className = "subtitle"
+      scoreText.style.fontSize = "30px"
+      scoreText.innerText = 'Your Score: '+ score.value
+      panel.appendChild(scoreText);
+      //restart button
+      let restartButton = document.createElement("a")
+      let restartIcon = document.createElement("i")
+      restartIcon.className = "fa fa-repeat"
+      restartButton.appendChild(restartIcon)
+      restartIcon.style.position = "relative"
+      restartIcon.style.margin = "18px"
+      restartButton.className = "music-btn"
+      restartButton.style.fontSize = "40px"
+      restartButton.style.color = "white"
+      restartButton.style.width = "75px"
+      restartButton.style.height="75px"
+      panel.appendChild(restartButton)
+
+      restartButton.addEventListener("click",()=>
+      {
+        document.body.removeChild(panel)
+        init_game()
+        gameIntervalID = setInterval(game,20)
+        level = 1;
+        background_sound.play();
+      })
+    }
+    function sound(src)
+    {
+      this.sound = document.createElement("audio");
+      this.sound.src = src;
+      this.sound.setAttribute("preload", "auto");
+      this.sound.setAttribute("controls", "none");
+      this.sound.style.display = "none";
+      this.sound.volume = volume;
+      document.body.appendChild(this.sound);
+      this.play = function(){
+        this.sound.play();
+      }
+      this.stop = function(){
+        this.sound.pause();
+      }
+    }
+    //draw the character to the canvas
+    var drawCharacter = ()=>
+    {
+        ctx.beginPath();
+        ctx.drawImage(char.img,char.pos.x,char.pos.y);
+        ctx.closePath();
+    }
+    //draw apartments to the canvas
+    var drawApartments =()=>
+    {
+        ctx.beginPath();
+        ctx.drawImage(apartment_left.img,apartment_left.pos.x,apartment_left.pos.y);
+        ctx.drawImage(apartment_right.img,apartment_right.pos.x,apartment_right.pos.y);
+        ctx.closePath();
+    }
+    //draw platforms to the canvas
+    var drawPlatforms = ()=>
+    {
+      for(let platform of platforms)
+      {
+        ctx.beginPath();
+        ctx.drawImage(platform.img,platform.pos.x,platform.pos.y);
+        if(platform.index %10 == 0 && platform.toConnected == "left")
+        {
+          ctx.fillStyle = "#000000";
+          ctx.fillText(platform.index.toString(),
+            platform.pos.x+5+platform.width, platform.pos.y+platform.height/2+5);
+        }
+        ctx.closePath();
+      }
+    }
+    //draw score text to the canvas
+    var drawUIElements =()=>
+    {
+      //score text
+      ctx.beginPath();
+      ctx.fillStyle = "#fff";
+      ctx.fillText(score.value.toString(), score.pos.x,score.pos.y);
+      ctx.closePath();
+    }
+
+    var game =()=>
+    {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        drawCharacter();
+        drawApartments();
+        drawPlatforms();
+        drawUIElements();
+        onCollision();
+        handleGravity();
+        gameOverHandler();
+        if(level == 2 || level ==4)
+        {
+          handlePlatformMovement();
+        }
+
+    }
+    function keyDownHandler(e)
+    {
+        if(e.key == "ArrowUp")
+        {
+          handleJump();
+          char.onGround = false
+
+        }
+        if(e.key == "ArrowRight")
+        {
+          setIntervalX(()=>char.pos.x += char.speed.x/10,20,10)
+        }
+        else if(e.key == "ArrowLeft")
+        {
+          setIntervalX(()=>char.pos.x -= char.speed.x/10,20,10)
+        }
+    }
+    function keyUpHandler(e)
+    {
+      if(e.key == "ArrowUp")
+      {
+        char.onGround= false;
+      }
+    }
+
+    function handleClick(e)
+    {
+      if(e.clientY < char.pos.y)
+      {
+
+        if(e.clientX >= char.pos.x + char.width)
+        {
+          setIntervalX(()=>char.pos.x += char.speed.x/10,20,10)
+        }
+        else if(e.clientX <= char.pos.x)
+        {
+          setIntervalX(()=>char.pos.x -= char.speed.x/10,20,10)
+        }
+        handleJump()
+      }
+
+    }
+     function handleMouseUp(e)
+     {
+       if(e.clientY < char.pos.y)
+       {
+         char.onGround=false
+       }
+
+     }
+    //this func. is taken from stackoverflow.com as the answer of the question(answered by Daniel Vassallo)
+    // 'Javascript - telling setInterval to only fire x amount of times?''
+    // This funct. used in movement to the left,right and also jump. Before not using this func. and
+    // say jump to character about 10 units, it was seen like it is teleporting to that point. It wasn't good.
+    // Now this function provides to do that if jump then start the move 1 by 1 to the 10 units with a paramater delay
+    //and this is seen like the character is really moving or jumping.
+    var setIntervalX = (callback, delay, repetitions)=>
+    {
+      var x = 0;
+      var intervalID = window.setInterval(function () {
+
+        callback();
+
+        if (++x === repetitions) {
+            window.clearInterval(intervalID);
+        }
+      }, delay);
+    }
+
+    var onCollision =() =>//control character is colliding with any apartment or any platform...
+    {
+      if (char.pos.y > canvas.width)
+      {
+        is_game_over = true;//character is already falled down
+      }
+      if(char.pos.x <= apartment_left.pos.x + apartment_left.width)//character is colliding with left apartment
+      {
+        if(level == 45)
+        {
+          is_game_over = true;
+        }
+        else
+        {
+          char.pos.x = apartment_left.pos.x + apartment_left.width
+        }
+      }
+      else if(char.pos.x+char.width >= apartment_right.pos.x)//character is colliding with left apartment
+      {
+        if(level == 45)
+        {
+          is_game_over = true;
+        }
+        else
+        {
+        char.pos.x = apartment_right.pos.x - char.width//character is colliding with right apartments
+        }
+      }
+      for(let plat of platforms)
+      {
+           handlePlatformCollision(plat);
+
+      }
+    }
+    //this functions seems to control every thing on collision because of its name. But it only controls if
+    //the character is on collision with a platform. Only character is needed to be controlled if is colliding with a platform.
+    var handlePlatformCollision = (platform)=>
+    {
+      //this control statements enough the control is it colliding.
+      //control if character is colliding from bottom side (if its head is more closer to platform_y)
+      //or top side ( foots of the character on ground).If character hits its head from bot side
+      //to the platform the game will over. If only falling down to the platform,it is the things need
+      // to be done.
+
+      let isCollising = false;
+        if(char.pos.x > platform.pos.x-3 && char.pos.x < platform.pos.x+platform.width+3 &&
+          char.pos.y+char.height > platform.pos.y-1 && char.pos.y+char.height< platform.pos.y + platform.height-5)
+        {
+          isCollising=true;
+        }
+
+      if(isCollising)
+      {
+        score.value =(Number(score.value) + Math.random()*10).toFixed(0)
+        char.img = char_img;
+        if((platform.index == platform_count-1))
+        {//devam ediverrr
+          if(level == 1 && (platform.is_controlled == false))
+          {
+            platform.is_controlled = true
+
+            init_level(level+1)
+            level = 2;
+            setIntervalX(()=>
+            {
+              if(level !=2)return;
+              platform_gravity_magnitude+=platform_gravity_increase_amount
+              char_gravity_magnitude+=char_gravity_increase_amount
+            },2000,15)
+          }
+          else if(level == 2 && (platform.is_controlled == false))
+          {
+            platform.is_controlled = true
+            init_level(level+1)
+            level=3
+
+          }
+          else if(level == 3 && (platform.is_controlled == false))
+          {
+            platform.is_controlled = true
+            init_level(level+1)
+            level = 4
+            setIntervalX(()=>
+            {
+              if(level !=2)return;
+              platform_gravity_magnitude+=platform_gravity_increase_amount
+              char_gravity_magnitude+=char_gravity_increase_amount
+            },2000,15)
+          }
+          else if(level == 4 && (platform.is_controlled == false))
+          {
+            platform.is_controlled = true
+            is_game_finished = true;
+          }
+
+        }
+        if(char.pos.y<platform.pos.y)//falling from top
+        {
+          char.onGround = true;
+          char.pos.y = platform.pos.y-char.height+5;
+          //platform.gravity_magnitude = char.gravity_magnitude; // keep moving with platform until jump
+          return;
+        }
+        else if(char.pos.y > platform.pos.y)
+        {
+          is_game_over = true; // hitting head from bottom
+          return;
+        }
+      }
+    }
+    var init_level = (passing_level)=>
+    {
+      platform_gravity_magnitude=1.5
+      char_gravity_magnitude =3
+
+        setIntervalX(()=>
+            {
+              ctx.beginPath();
+              ctx.fillStyle = "#000";
+              ctx.font = "30px"
+              ctx.fillText("STEP "+passing_level, canvas.width/2-40,canvas.height/2-60);
+
+              ctx.closePath();
+            },20,150)
+            setTimeout(()=>
+            {
+              setIntervalX(()=>char.pos.y -= char.jumpMagnitude/5,20,35)
+
+            },200)
+            if(passing_level == 2)
+            {
+              setTimeout(()=>
+              {
+                canvas.style.backgroundImage = "url('images/winter.png')"
+                chosen_platform = winter_platform;
+              },2000)
+              
+            }
+            else if(passing_level == 3)
+            {
+              setTimeout(()=>
+              {
+                canvas.style.backgroundImage = "url('images/autumn.png')"
+                chosen_platform = autumn_platform
+              },2000)
+              
+            }
+            else if(passing_level == 4)
+            {
+              setTimeout(()=>
+              {
+                canvas.style.backgroundImage = "url('images/sunny.png'"
+                chosen_platform = sunny_platform
+              },2000)
+            }
+            setTimeout(init_platforms,2000)
+
+    }
+    var handleJump =()=>
+    {
+      if(char.onGround)
+      {
+        char.onGround = false;
+        jump_sound.play()
+        char.img = char_jump_img;
+        setIntervalX(()=>char.pos.y -= char.jumpMagnitude/5,20,10)
+      }
+
+    }
+    var handleGravity =()=>
+    {
+      for(let plt of platforms) //platforms are effected of gravity
+      {
+        if(level == 2)
+        {
+          plt.pos.y += platform_gravity_magnitude+platform_gravity_increase_amount
+        }
+        else
+        {
+          plt.pos.y += platform_gravity_magnitude
+        }
+      }
+      char.pos.y += char_gravity_magnitude //character is effected of gravity
+    }
+    var handlePlatformMovement = ()=>
+    {
+        let platform_movement_velocity = 1.2
+
+        for(let platform of platforms)
+        {
+
+         if((platform.pos.x+platform.width+platform_movement_velocity >= apartment_right.pos.x))
+         {
+           platform.toConnected = "right"
+         }
+         else if((platform.pos.x-platform_movement_velocity <= apartment_left.pos.x +apartment_left.width))
+         {
+           platform.toConnected = "left"
+          }
+          if(platform.toConnected == "right")
+          {
+            platform.pos.x-=platform_movement_velocity;
+          }
+          else if(platform.toConnected == "left")
+          {
+            platform.pos.x+=platform_movement_velocity;
+          }
+        }
+
+    }
+
+
+    var gameOverHandler = ()=>
+    {
+      if(is_game_over||is_game_finished)
+      {
+        let savedHighScore = Number(JSON.parse(localStorage.getItem('highscore')))
+        if(score.value > savedHighScore)
+        {
+          score.isBroken = true;
+          localStorage.setItem('highscore',JSON.stringify(score.value));
+        }
+        clearInterval(gameIntervalID);
+        document.body.removeChild(canvas);
+        let menuText = (is_game_over)?"GAME OVER!":"YOU WIN"
+        makeEndGameMenu(menuText);
+        background_sound.stop();
+        if(is_game_over) death_sound.play()
+        else win_sound.play()
+
+      }
+    }
+
+    var initLocalStorage = ()=>
+    {
+        if(origin.startsWith('http') && localStorage)
+        {
+            if(!localStorage.highscore)
+            {
+                localStorage.setItem('highscore',JSON.stringify(0))
+            }
+        }
+    }
+    window.addEventListener('load', async e => {
+    if ('serviceWorker' in navigator) {
+        try {
+            navigator.serviceWorker.register('sw.js');
+            console.log('SW registered');
+
+        } catch (error) {
+            console.log('SW failed');
+
+        }
+    }
+    });
+    initLocalStorage();
+    makeStartMenu();
+
+</script>
+
+</body>
+</html>
