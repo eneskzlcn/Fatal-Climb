@@ -1,2 +1,2 @@
 
-![](https://eneskzlcn.github.io/FatalClimb/images/fatalClimb.gif)
+![](https://eneskzlcn.github.io/Fatal-Climb/images/fatalClimb.gif)
